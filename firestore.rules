@@ -1,0 +1,121 @@
+rules_version = '2';
+
+// Access model
+//  - Every signed-in user must have a verified ALU email.
+//  - Students create reports, edit/withdraw their own while still "submitted",
+//    and add/remove only themselves in confirmedBy ("affects me too").
+//  - Staff (users/{uid}.role == 'staff', set by an admin in the console)
+//    change status and write history entries.
+//  - Nobody can promote themselves to staff from the app.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function aluEmail() {
+      return request.auth.token.email.matches('.*@(alustudent|alueducation)[.]com$');
+    }
+
+    function verified() {
+      return signedIn() && request.auth.token.email_verified == true && aluEmail();
+    }
+
+    function isStaff() {
+      return verified()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff';
+    }
+
+    function validStatus(s) {
+      return s in ['submitted', 'inReview', 'inProgress', 'resolved', 'rejected'];
+    }
+
+    function validCategory(c) {
+      return c in ['facilities', 'water', 'electricity', 'furniture',
+                   'sanitation', 'safety', 'internet', 'other'];
+    }
+
+    function validReportFields(d) {
+      return d.title is string && d.title.size() >= 5 && d.title.size() <= 80
+        && d.description is string && d.description.size() >= 15 && d.description.size() <= 1000
+        && d.location is string && d.location.size() >= 1 && d.location.size() <= 100
+        && validCategory(d.category)
+        && d.isAnonymous is bool;
+    }
+
+    function changedOnly(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    match /users/{uid} {
+      // Own profile only; staff may look people up when following up a report.
+      allow read: if signedIn() && (request.auth.uid == uid || isStaff());
+      // Allowed before verification so registration can write the profile.
+      allow create: if signedIn() && request.auth.uid == uid && aluEmail()
+        && request.resource.data.role == 'student'
+        && request.resource.data.email == request.auth.token.email;
+      allow update: if signedIn() && request.auth.uid == uid
+        && changedOnly(['displayName']);
+      allow delete: if false;
+    }
+
+    match /incidents/{incidentId} {
+      allow read: if verified();
+
+      allow create: if verified()
+        && validReportFields(request.resource.data)
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.status == 'submitted'
+        && request.resource.data.confirmedBy.size() == 0;
+
+      // Reporter edits while the report is still waiting for staff.
+      allow update: if verified()
+        && resource.data.reporterId == request.auth.uid
+        && resource.data.status == 'submitted'
+        && changedOnly(['title', 'description', 'category', 'location',
+                        'isAnonymous', 'reporterName', 'photoUrl', 'photoPath',
+                        'updatedAt'])
+        && validReportFields(request.resource.data);
+
+      // Staff status changes.
+      allow update: if isStaff()
+        && changedOnly(['status', 'latestNote', 'updatedAt'])
+        && validStatus(request.resource.data.status);
+
+      // Any verified user toggling only their own uid in confirmedBy.
+      allow update: if verified()
+        && changedOnly(['confirmedBy'])
+        && request.resource.data.confirmedBy.toSet()
+             .difference(resource.data.confirmedBy.toSet())
+             .union(resource.data.confirmedBy.toSet()
+                    .difference(request.resource.data.confirmedBy.toSet()))
+             .hasOnly([request.auth.uid]);
+
+      allow delete: if verified()
+        && resource.data.reporterId == request.auth.uid
+        && resource.data.status == 'submitted';
+
+      match /updates/{updateId} {
+        allow read: if verified();
+
+        // Staff write history entries; the reporter writes only the initial
+        // "submitted" entry when creating the report.
+        // getAfter() sees the report written in the same batch.
+        allow create: if verified()
+          && request.resource.data.byId == request.auth.uid
+          && validStatus(request.resource.data.status)
+          && (isStaff()
+              || (request.resource.data.status == 'submitted'
+                  && getAfter(/databases/$(database)/documents/incidents/$(incidentId)).data.reporterId == request.auth.uid));
+
+        allow update: if false;
+
+        // Lets a reporter withdraw a report together with its history.
+        allow delete: if verified()
+          && get(/databases/$(database)/documents/incidents/$(incidentId)).data.reporterId == request.auth.uid
+          && get(/databases/$(database)/documents/incidents/$(incidentId)).data.status == 'submitted';
+      }
+    }
+  }
+}
