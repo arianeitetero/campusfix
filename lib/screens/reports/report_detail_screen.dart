@@ -7,6 +7,7 @@ import '../../providers/incident_provider.dart';
 import '../../widgets/category_avatar.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/feedback.dart';
+import '../../widgets/incident_photo.dart';
 import '../../widgets/status_chip.dart';
 import '../../widgets/status_tracker.dart';
 import '../staff/status_update_sheet.dart';
@@ -80,7 +81,7 @@ class ReportDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 32),
         children: [
-          if (incident.photoUrl != null) _Photo(url: incident.photoUrl!),
+          if (incident.hasPhoto) _Photo(incident: incident),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -141,8 +142,16 @@ class ReportDetailScreen extends StatelessWidget {
 }
 
 class _Photo extends StatelessWidget {
-  const _Photo({required this.url});
-  final String url;
+  const _Photo({required this.incident});
+
+  final Incident incident;
+
+  Widget _image({required BoxFit fit}) => IncidentPhoto(
+        url: incident.photoUrl,
+        path: incident.photoPath,
+        storage: incident.photoStorage,
+        fit: fit,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -154,21 +163,13 @@ class _Photo extends StatelessWidget {
           appBar: AppBar(
               backgroundColor: Colors.black, foregroundColor: Colors.white),
           body: Center(
-            child: InteractiveViewer(child: Image.network(url)),
+            child: InteractiveViewer(child: _image(fit: BoxFit.contain)),
           ),
         ),
       )),
       child: AspectRatio(
         aspectRatio: 16 / 10,
-        child: Image.network(
-          url,
-          fit: BoxFit.cover,
-          loadingBuilder: (context, child, progress) => progress == null
-              ? child
-              : const Center(child: CircularProgressIndicator()),
-          errorBuilder: (_, _, _) => const Center(
-              child: Icon(Icons.broken_image_outlined, size: 48)),
-        ),
+        child: _image(fit: BoxFit.cover),
       ),
     );
   }

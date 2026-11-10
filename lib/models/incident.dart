@@ -19,6 +19,7 @@ class Incident {
     required this.updatedAt,
     this.photoUrl,
     this.photoPath,
+    this.photoStorage = 'firebase',
     this.confirmedBy = const [],
     this.latestNote,
   });
@@ -40,6 +41,9 @@ class Incident {
 
   /// Storage path of the photo, kept so it can be deleted with the report.
   final String? photoPath;
+  final String photoStorage;
+
+  bool get hasPhoto => photoUrl != null || photoPath != null;
 
   /// UIDs of students who tapped "Affects me too". Used to show staff how
   /// widespread a problem is without creating duplicate reports.
@@ -87,6 +91,7 @@ class Incident {
       updatedAt: readTime('updatedAt'),
       photoUrl: data['photoUrl'] as String?,
       photoPath: data['photoPath'] as String?,
+      photoStorage: data['photoStorage'] as String? ?? 'firebase',
       confirmedBy: List<String>.from(data['confirmedBy'] as List? ?? const []),
       latestNote: data['latestNote'] as String?,
     );

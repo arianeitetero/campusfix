@@ -59,6 +59,7 @@ firestore-debug.log*
 storage-debug.log*
 ui-debug.log*
 emulator-data/
+supabase/.temp/
 
 # Secrets and signing keys
 .env

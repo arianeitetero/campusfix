@@ -44,8 +44,9 @@ class IncidentCard extends StatelessWidget {
                             incident.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -67,8 +68,11 @@ class IncidentCard extends StatelessWidget {
                           Icon(Icons.place_outlined, size: 14, color: muted),
                           const SizedBox(width: 2),
                           Flexible(
-                            child: Text(incident.location,
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            child: Text(
+                              incident.location,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                           const SizedBox(width: 10),
                           Text(timeAgo(incident.createdAt)),
@@ -78,16 +82,19 @@ class IncidentCard extends StatelessWidget {
                             const SizedBox(width: 2),
                             Text('${incident.confirmations}'),
                           ],
-                          if (incident.photoUrl != null) ...[
+                          if (incident.hasPhoto) ...[
                             const SizedBox(width: 10),
                             Icon(Icons.photo_outlined, size: 14, color: muted),
                           ],
                           if (isMine) ...[
                             const Spacer(),
-                            Text('Yours',
-                                style: TextStyle(
-                                    color: theme.colorScheme.primary,
-                                    fontWeight: FontWeight.w600)),
+                            Text(
+                              'Yours',
+                              style: TextStyle(
+                                color: theme.colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ],
                         ],
                       ),

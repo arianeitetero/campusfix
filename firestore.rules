@@ -75,7 +75,7 @@ service cloud.firestore {
         && resource.data.status == 'submitted'
         && changedOnly(['title', 'description', 'category', 'location',
                         'isAnonymous', 'reporterName', 'photoUrl', 'photoPath',
-                        'updatedAt'])
+                        'photoStorage', 'updatedAt'])
         && validReportFields(request.resource.data);
 
       // Staff status changes.

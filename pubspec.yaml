@@ -38,6 +38,7 @@ dependencies:
   firebase_auth: ^7.0.1
   cloud_firestore: ^7.1.0
   firebase_storage: ^14.0.1
+  supabase_flutter: ^2.9.1
   provider: ^6.1.5+1
   image_picker: ^1.2.4
   intl: ^0.20.3

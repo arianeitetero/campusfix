@@ -4,23 +4,33 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'feedback.dart';
+import 'incident_photo.dart';
 
 /// Optional photo attachment for the report form. Shows either the newly
 /// picked file, the existing uploaded photo (when editing), or a picker.
-class PhotoPickerField extends StatelessWidget {
+class PhotoPickerField extends StatefulWidget {
   const PhotoPickerField({
     super.key,
     required this.file,
     required this.existingUrl,
+    required this.existingPath,
+    required this.existingStorage,
     required this.onPicked,
     required this.onRemoved,
   });
 
   final File? file;
   final String? existingUrl;
+  final String? existingPath;
+  final String existingStorage;
   final ValueChanged<File> onPicked;
   final VoidCallback onRemoved;
 
+  @override
+  State<PhotoPickerField> createState() => _PhotoPickerFieldState();
+}
+
+class _PhotoPickerFieldState extends State<PhotoPickerField> {
   Future<void> _pick(BuildContext context) async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -52,7 +62,7 @@ class PhotoPickerField extends StatelessWidget {
         maxWidth: 1600,
         imageQuality: 75,
       );
-      if (picked != null) onPicked(File(picked.path));
+      if (picked != null) widget.onPicked(File(picked.path));
     } catch (_) {
       if (context.mounted) {
         showMessage(context, 'Could not open the camera or gallery.',
@@ -64,7 +74,9 @@ class PhotoPickerField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasImage = file != null || existingUrl != null;
+    final hasImage = widget.file != null ||
+        widget.existingUrl != null ||
+        widget.existingPath != null;
 
     if (!hasImage) {
       return OutlinedButton.icon(
@@ -74,9 +86,13 @@ class PhotoPickerField extends StatelessWidget {
       );
     }
 
-    final image = file != null
-        ? Image.file(file!, fit: BoxFit.cover)
-        : Image.network(existingUrl!, fit: BoxFit.cover);
+    final image = widget.file != null
+        ? Image.file(widget.file!, fit: BoxFit.cover)
+        : IncidentPhoto(
+            url: widget.existingUrl,
+            path: widget.existingPath,
+            storage: widget.existingStorage,
+          );
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
@@ -95,7 +111,7 @@ class PhotoPickerField extends StatelessWidget {
               const SizedBox(width: 4),
               IconButton.filledTonal(
                 tooltip: 'Remove photo',
-                onPressed: onRemoved,
+                onPressed: widget.onRemoved,
                 icon: Icon(Icons.delete_outline, color: theme.colorScheme.error),
               ),
             ]),

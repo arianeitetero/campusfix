@@ -199,6 +199,10 @@ class _ReportFormScreenState extends State<ReportFormScreen> {
               PhotoPickerField(
                 file: _photo,
                 existingUrl: _existingPhotoUrl,
+                existingPath:
+                    _removeExistingPhoto ? null : widget.existing?.photoPath,
+                existingStorage:
+                    widget.existing?.photoStorage ?? 'firebase',
                 onPicked: (f) => setState(() => _photo = f),
                 onRemoved: () => setState(() {
                   if (_photo != null) {

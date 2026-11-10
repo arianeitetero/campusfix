@@ -2,7 +2,7 @@
 
 A Flutter mobile app for ALU students to report campus issues (water, electricity, broken facilities, furniture, sanitation, safety, IT) and track them until they are resolved. Campus staff triage reports and update their status.
 
-Built with Flutter, Provider, Firebase Authentication, Cloud Firestore and Firebase Storage.
+Built with Flutter, Provider, Firebase Authentication, Cloud Firestore, and Supabase Storage for photos.
 
 ## Features
 
@@ -25,23 +25,39 @@ Built with Flutter, Provider, Firebase Authentication, Cloud Firestore and Fireb
 2. Create a Firebase project, then enable:
    - **Authentication** → Email/Password
    - **Cloud Firestore**
-   - **Storage**
 3. Connect the app to your project. This replaces the placeholder `lib/firebase_options.dart`:
    ```bash
    dart pub global activate flutterfire_cli
    flutterfire configure --platforms=android,ios
    ```
-4. Deploy the security rules:
+4. Create a Supabase project (the free plan has storage and bandwidth quotas)
+   and a **private** Storage bucket named `incidents`.
+   Set the bucket's file size limit to 5 MB and allowed MIME type to `image/jpeg`.
+5. Deploy the photo function. It verifies the app's existing Firebase ID tokens;
+   Firebase Authentication and Firestore remain the app's identity and database:
+   ```bash
+   npx supabase login
+   npx supabase link --project-ref <your-supabase-project-ref>
+   npx supabase secrets set FIREBASE_PROJECT_ID=campusfix-fd32d
+   npx supabase functions deploy incident-photo
+   ```
+   The function uses Supabase's server-side `SUPABASE_SERVICE_ROLE_KEY`. Never
+   put that key in the Flutter app.
+6. Deploy the Firestore rules (they allow the new photo storage metadata):
    ```bash
    firebase login
-   firebase use <your-project-id>
-   firebase deploy --only firestore:rules,storage
+   firebase use campusfix-fd32d
+   firebase deploy --only firestore:rules
    ```
-5. Run the app on an emulator or device:
+7. Copy your Supabase project URL and anon/publishable key from the project's
+   API settings, then run the app with them:
    ```bash
    flutter pub get
-   flutter run
+   flutter run --dart-define="SUPABASE_URL=https://<project-ref>.supabase.co" --dart-define="SUPABASE_ANON_KEY=<anon-key>"
    ```
+   The anon key is intended for app use; the bucket stays private and photo
+   access is mediated by the deployed function. New photo uploads require these
+   settings; the app does not silently fall back to Firebase Storage.
 
 ### Creating a staff account
 
@@ -55,13 +71,13 @@ lib/
 ├── core/                      theme, validators, date formatting
 ├── models/                    Incident, AppUser, enums, IncidentFilter (pure Dart)
 ├── services/                  Firebase access: AuthService, UserRepository,
-│                              IncidentRepository, StorageService
+│                              IncidentRepository, StorageService (Supabase photos)
 ├── providers/                 AuthProvider, IncidentProvider (ChangeNotifier)
 ├── screens/                   auth/, home/, reports/, staff/, profile/
 └── widgets/                   reusable UI: IncidentCard, StatusChip, FilterBar, …
 ```
 
-Data flows in one direction: **UI → Provider → Repository → Firebase**, and Firestore streams flow back **Firebase → Repository → Provider → UI**.
+Data flows in one direction: **UI → Provider → Repository → Firebase** for auth and app data. Photo uploads and signed photo reads go through the Supabase Edge Function to the private Supabase bucket.
 
 - `AuthProvider` listens to `authStateChanges()` and to the user's profile document. It exposes `AuthStatus` (`initializing / signedOut / unverified / signedIn`), and `AuthGate` swaps the root screen to match, so the app needs no manual navigation on sign-in or sign-out.
 - `IncidentProvider` is a `ChangeNotifierProxyProvider` that depends on `AuthProvider`. It subscribes to the `incidents` stream when a user signs in and clears everything on sign-out. Screens look reports up **by id** from this single source, so a staff status change appears at once on the list, the detail screen, My reports and the dashboard.
@@ -78,7 +94,7 @@ incidents/{incidentId}
   category: facilities | water | electricity | furniture | sanitation | safety | internet | other
   status:   submitted | inReview | inProgress | resolved | rejected
   reporterId, reporterName ("" when anonymous), isAnonymous
-  photoUrl, photoPath
+  photoUrl, photoPath, photoStorage
   confirmedBy: [uid]           students who tapped "affects me too"
   latestNote                    last staff note (shown on cards)
   createdAt, updatedAt
@@ -87,11 +103,12 @@ incidents/{incidentId}/updates/{updateId}
   status, note, byId, byName, at
 ```
 
-Photos are stored at `incidents/{uid}/{incidentId}.jpg` in Firebase Storage.
+Photos are stored in the private Supabase `incidents` bucket under
+`{uid}/{incidentId}_{timestamp}.jpg`. Firebase Auth and Firestore are unchanged.
 
 ## Access control
 
-The rules in [`firestore.rules`](firestore.rules) and [`storage.rules`](storage.rules) enforce the roles on the server, not only in the UI:
+The rules in [`firestore.rules`](firestore.rules) and the `incident-photo` Supabase Edge Function enforce access on the server, not only in the UI:
 
 | Action | Who |
 |---|---|
@@ -101,7 +118,8 @@ The rules in [`firestore.rules`](firestore.rules) and [`storage.rules`](storage.
 | Change status / add history | Users whose profile `role == "staff"` |
 | Toggle "affects me too" | Any verified user, adding or removing **only their own uid** |
 | Change `role` | Nobody from the app (console only) |
-| Upload a photo | The owner of the `{uid}` path; images only, under 5 MB |
+| Upload or delete a photo | The verified ALU reporter for the `{uid}` path, through the Supabase Edge Function; JPEG only, under 5 MB |
+| View a photo | Any verified ALU user; the Edge Function returns a one-hour signed URL |
 
 ## Tests
 
@@ -115,6 +133,6 @@ flutter test
 
 ## Known limitations
 
-- `reporterId` remains in anonymous reports because the security rules need it. The app never shows it, but a technical user could read it from the raw data. A Cloud Function that moves reporter identity into a staff-only collection would close this gap.
+- `reporterId` remains in anonymous reports because the security rules need it. The app never shows it, but a user with direct access to the raw data can read it. A Cloud Function that moves reporter identity into a staff-only collection would close this gap.
 - All reports are streamed to the client and filtered there. This works at campus scale, but large datasets would need server-side queries and pagination.
 - There are no push notifications for status changes yet (this would need FCM plus a Cloud Function).

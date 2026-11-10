@@ -56,8 +56,9 @@ class IncidentRepository {
         'status': IncidentStatus.submitted.name,
         'reporterId': reporter.uid,
         'reporterName': draft.isAnonymous ? '' : reporter.displayName,
-        'photoUrl': uploaded?.url,
+        'photoUrl': null,
         'photoPath': uploaded?.path,
+        'photoStorage': uploaded?.storage,
         'confirmedBy': <String>[],
         'latestNote': null,
         'createdAt': FieldValue.serverTimestamp(),
@@ -74,7 +75,9 @@ class IncidentRepository {
     try {
       await batch.commit();
     } catch (_) {
-      if (uploaded != null) await _storage.deletePhoto(uploaded.path);
+      if (uploaded != null) {
+        await _storage.deletePhoto(uploaded.path, storage: uploaded.storage);
+      }
       rethrow;
     }
     return ref.id;
@@ -95,18 +98,41 @@ class IncidentRepository {
       'updatedAt': FieldValue.serverTimestamp(),
     };
 
+    UploadedPhoto? uploaded;
     if (newPhoto != null) {
-      final uploaded = await _storage.uploadIncidentPhoto(
+      uploaded = await _storage.uploadIncidentPhoto(
           uid: reporter.uid, incidentId: incident.id, file: newPhoto);
-      data['photoUrl'] = uploaded.url;
+      data['photoUrl'] = null;
       data['photoPath'] = uploaded.path;
-    } else if (removePhoto && incident.photoPath != null) {
-      await _storage.deletePhoto(incident.photoPath!);
+      data['photoStorage'] = uploaded.storage;
+    } else if (removePhoto) {
       data['photoUrl'] = null;
       data['photoPath'] = null;
+      data['photoStorage'] = null;
     }
 
-    await _incidents.doc(incident.id).update(data);
+    try {
+      await _incidents.doc(incident.id).update(data);
+    } catch (_) {
+      if (uploaded != null) {
+        await _storage.deletePhoto(uploaded.path, storage: uploaded.storage);
+      }
+      rethrow;
+    }
+
+    if (uploaded != null && incident.photoPath != null) {
+      await _storage.deletePhoto(
+        incident.photoPath!,
+        storage: incident.photoStorage,
+      );
+    }
+
+    if (removePhoto && incident.photoPath != null) {
+      await _storage.deletePhoto(
+        incident.photoPath!,
+        storage: incident.photoStorage,
+      );
+    }
   }
 
   /// Removes the report, its history and its photo. Firestore does not
@@ -121,7 +147,10 @@ class IncidentRepository {
     await batch.commit();
 
     if (incident.photoPath != null) {
-      await _storage.deletePhoto(incident.photoPath!);
+      await _storage.deletePhoto(
+        incident.photoPath!,
+        storage: incident.photoStorage,
+      );
     }
   }
 
